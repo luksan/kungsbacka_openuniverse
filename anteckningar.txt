@@ -1,0 +1,18 @@
+Frågor till alla: IPv6?? Publika IPn?
+
+Aardnet - oklart. ingen info
+
+Bitcom - webhostning ingår, och 3 publika IPn
+   Frågor: Hur funkar webhostningen? PHP? Python CGI? Databaser
+
+Brabit - oklart.
+
+Universal Telecom - Publika IPv4 adresser, 2 stycken går att få.
+
+TH1NG - Oklart.
+
+
+# Dåliga
+
+Bredband2   har FAQ. Inga publika IP som standard. Ingen IPv6
+Telenor     ...

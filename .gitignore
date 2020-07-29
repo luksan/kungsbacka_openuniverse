@@ -1,0 +1,5 @@
+/target
+*.html
+*.json
+.~*
+*.xlsx
