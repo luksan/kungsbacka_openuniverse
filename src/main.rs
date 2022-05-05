@@ -12,7 +12,7 @@ extern crate tabular;
 use anyhow::Result;
 
 use crate::parse::{parse_details_page, parse_internet_overview_page};
-use clap::{App, Arg, ArgMatches, SubCommand};
+use clap::{Parser, Subcommand};
 use regex::Regex;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -135,8 +135,8 @@ fn fetch_details_page(product_id: u32) -> Result<PathBuf> {
     Ok(filename)
 }
 
-fn update(args: &ArgMatches) -> Result<()> {
-    if !args.is_present("no-download") {
+fn update(no_download: bool) -> Result<()> {
+    if !no_download {
         download()?;
     }
     let mut internet_offers = parse_internet_overview_page(load_file(INTERNET_FILE)?.as_ref());
@@ -164,7 +164,7 @@ fn update(args: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn dump(_args: &ArgMatches) -> Result<()> {
+fn dump() -> Result<()> {
     let mut offers = load_offers_from_json()?;
 
     sort_offers!(offers, isp, speed_down, speed_up);
@@ -199,28 +199,30 @@ fn load_offers_from_json() -> Result<Vec<Offer>> {
     Ok(ret)
 }
 
+#[derive(Parser)]
+#[clap(author, version, about)]
+struct CmdlineOpts {
+    #[clap(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Print the current offers in the database
+    Dump,
+    /// Ladda ner priser från Open Universe
+    Update {
+        /// Don't go online to download prices, use the cache only.
+        #[clap(short = 'n', long = "no-download")]
+        no_download: bool,
+    },
+}
+
 fn main() -> Result<()> {
-    let matches = App::new("Kungsbacka Openuniverse priskoll")
-        .version("0.1")
-        .author("Lukas Sandström")
-        .about("Laddar ner erbjudanden från Openuniverse och jämför priser")
-        .subcommand(
-            SubCommand::with_name("update")
-                .about("Ladda ner priser från Open Universe")
-                .arg(
-                    Arg::with_name("no-download")
-                        .long("no-download")
-                        .help("Don't go online to download prices, use the cache only."),
-                ),
-        )
-        .subcommand(SubCommand::with_name("dump").about("Print the current offers in the database"))
-        .get_matches();
+    let args: CmdlineOpts = Parser::parse();
 
-    match matches.subcommand() {
-        ("update", Some(args)) => update(args)?,
-        ("dump", Some(args)) => dump(args)?,
-        _ => (), // No subcommand given
-    };
-
-    Ok(())
+    match args.command {
+        Commands::Dump => dump(),
+        Commands::Update { no_download } => update(no_download),
+    }
 }

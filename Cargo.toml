@@ -2,14 +2,15 @@
 name = "kungsbacka_openuniverse"
 version = "0.1.0"
 authors = ["Lukas Sandström <luksan@gmail.com>"]
-edition = "2018"
+edition = "2021"
+description = "Ladda ner erbjudanden från Openuniverse och jämför priser."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.*"
 attohttpc = "0.15.*"
-clap = "2.*"
+clap = { version = "3", features = ["derive"] }
 lazy_static = "~1.4.0"
 markup5ever = "0.7.*" # This version must match what soup pulls in, see cargo tree
 regex = "1"
