@@ -1,6 +1,4 @@
-// #![allow(dead_code)]
-
-mod parse;
+#![allow(dead_code)]
 
 #[macro_use]
 extern crate lazy_static;
@@ -9,41 +7,44 @@ extern crate serde_derive;
 #[macro_use]
 extern crate tabular;
 
-use anyhow::Result;
-
-use crate::parse::{parse_details_page, parse_internet_overview_page};
-use clap::{Parser, Subcommand};
-use regex::Regex;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-const INTERNET_URL: &str = "http://kungsbacka.openuniverse.se/kungsbackastadsnat/internet/privat/";
-const INTERNET_FILE: &str = "internet_rs.html";
-const PAKET_URL: &str = "http://kungsbacka.openuniverse.se/kungsbackastadsnat/paket/privat/";
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+use regex::Regex;
+
+use crate::json_portal::ProductOffers;
+
+mod json_portal;
+
+const INTERNET_URL: &str = "https://kungsbacka.openuniverse.se/api/offer/GetProductsOnPortalId/?portalId=66891&seed=1683888950654&page=0&addressId=119273";
+const INTERNET_FILE: &str = "internet.json";
+const PAKET_URL: &str = "https://kungsbacka.openuniverse.se/kungsbackastadsnat/paket/privat/";
 const PAKET_FILE: &str = "paket_rs.html";
 const PRODUCT_PAGE_URL: &str =
-    "http://kungsbacka.openuniverse.se/kungsbackastadsnat/details.xhtml?productId=<prod_id>";
+    "https://kungsbacka.openuniverse.se/kungsbackastadsnat/details/<prod_id>";
 const PRODUCT_PAGE_FILE: &str = "product_<prod_id>.html";
 
 type Months = u8;
 type SEK = u16;
 type MBit = u16;
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub enum Campaign {
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum CampaignInfo {
     Yes(String),
     No,
     CheckDetails,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Offer {
     isp: String,
     product_id: u32,
     product_name: String,
     heading: String,
-    campaign: Campaign,
+    campaign: CampaignInfo,
     list_price: SEK,
     start_cost: SEK,
     speed_up: MBit,
@@ -62,9 +63,9 @@ impl Offer {
             static ref PRICE: Regex = Regex::new(r"(\d+) ?kr").unwrap();
         }
         match &self.campaign {
-            Campaign::No => self.calc_cost_2nd_year() + self.start_cost,
-            Campaign::CheckDetails => panic!("The details should be resolved during update"),
-            Campaign::Yes(campaign) => {
+            CampaignInfo::No => self.calc_cost_2nd_year() + self.start_cost,
+            CampaignInfo::CheckDetails => panic!("The details should be resolved during update"),
+            CampaignInfo::Yes(campaign) => {
                 let months;
                 if let Some(months_match) = MONTHS.captures(campaign) {
                     if &months_match[1] == "tre" {
@@ -139,21 +140,10 @@ fn update(no_download: bool) -> Result<()> {
     if !no_download {
         download()?;
     }
-    let mut internet_offers = parse_internet_overview_page(load_file(INTERNET_FILE)?.as_ref());
+    // let mut internet_offers = parse_internet_overview_page(load_file(INTERNET_FILE)?.as_ref());
+    let products = ProductOffers::from_file(INTERNET_FILE)?;
 
-    let mut remove = Vec::new();
-    for i in 0..internet_offers.len() {
-        let offer = &internet_offers[i];
-        if offer.campaign == Campaign::CheckDetails {
-            let filename = fetch_details_page(offer.product_id)?;
-            let mut sub_offers = parse_details_page(load_file(filename)?.as_ref())?;
-            internet_offers.append(&mut sub_offers);
-            remove.push(i);
-        }
-    }
-    for r in remove.iter().rev() {
-        internet_offers.swap_remove(*r);
-    }
+    let mut internet_offers = products.get_internet_offers();
     internet_offers.sort_by_key(|offer| offer.product_id);
 
     let x = serde_json::to_vec_pretty(&internet_offers)?;
