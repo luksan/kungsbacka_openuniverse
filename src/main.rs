@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 
 #[macro_use]
-extern crate lazy_static;
-#[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate tabular;
@@ -11,31 +9,27 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use regex::Regex;
 
-use crate::json_portal::ProductOffers;
+use crate::json_portal::{ProductOffers, Sek};
 
 mod json_portal;
 
-const INTERNET_URL: &str = "https://kungsbacka.openuniverse.se/api/offer/GetProductsOnPortalId/?portalId=66891&seed=1683888950654&page=0&addressId=119273";
+const INTERNET_URL: &str = "https://selfservice.ip-only.se/api/consumer-selfservice-backend/v1/public/service-offers?accessId=1137975&isCompany=false&onlyOrderableOffers=false&priorityOption=ALL_OFFERS";
 const INTERNET_FILE: &str = "internet.json";
-const PAKET_URL: &str = "https://kungsbacka.openuniverse.se/kungsbackastadsnat/paket/privat/";
-const PAKET_FILE: &str = "paket_rs.html";
 const PRODUCT_PAGE_URL: &str =
-    "https://kungsbacka.openuniverse.se/kungsbackastadsnat/details/<prod_id>";
+    "https://portal.openuniverse.se/best%C3%A4ll/tj%C3%A4nster/1137975/produkt-detaljer/<prod_id>";
 const PRODUCT_PAGE_FILE: &str = "product_<prod_id>.html";
 
-type Months = u8;
-type SEK = u16;
+type Months = i32;
+type SEK = Sek;
 type MBit = u16;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CampaignInfo {
     Yes(String),
     No,
-    CheckDetails,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -44,8 +38,10 @@ pub struct Offer {
     product_id: u32,
     product_name: String,
     heading: String,
-    campaign: CampaignInfo,
+    campaign_descr: String,
     list_price: SEK,
+    discounted_price: SEK,
+    discount_duration: Months,
     start_cost: SEK,
     speed_up: MBit,
     speed_down: MBit,
@@ -54,47 +50,16 @@ pub struct Offer {
 }
 
 impl Offer {
-    pub fn calc_cost_2nd_year(&self) -> SEK {
-        self.list_price * 12
+    pub fn calc_cost_2nd_year(&self) -> Sek {
+        (self.list_price * 12).into()
     }
     pub fn calc_cost_1st_year(&self) -> SEK {
-        lazy_static! {
-            static ref MONTHS: Regex = Regex::new(r"\b(\d\d?|tre) ?mån").unwrap();
-            static ref PRICE: Regex = Regex::new(r"(\d+) ?kr").unwrap();
-        }
-        match &self.campaign {
-            CampaignInfo::No => self.calc_cost_2nd_year() + self.start_cost,
-            CampaignInfo::CheckDetails => panic!("The details should be resolved during update"),
-            CampaignInfo::Yes(campaign) => {
-                let months;
-                if let Some(months_match) = MONTHS.captures(campaign) {
-                    if &months_match[1] == "tre" {
-                        months = 3
-                    } else {
-                        months = months_match[1].parse().expect(campaign);
-                    }
-                } else if campaign.contains("ett halvår") {
-                    months = 6;
-                } else {
-                    eprintln!("Campaign parse failed: {}", campaign);
-                    return 0;
-                }
-                let price: SEK;
-                if let Some(price_match) = PRICE.captures(campaign) {
-                    price = price_match[1].parse().expect(campaign);
-                } else if campaign.contains("halva priset")
-                    || campaign.contains("Halva priset")
-                    || campaign.contains("½ priset")
-                {
-                    price = self.list_price / 2;
-                } else {
-                    eprintln!("Failed to parse price reduction: {}", campaign);
-                    return 0;
-                }
-                months * price + (12 - months) * self.list_price + self.start_cost
-            }
-        }
+        (self.discounted_price * self.discount_duration as i32
+            + (12 - self.discount_duration) * self.list_price.i32()
+            + self.start_cost.i32())
+        .into()
     }
+
     pub fn speed_str(&self) -> String {
         format!("{}/{}", self.speed_down, self.speed_up)
     }
@@ -113,16 +78,11 @@ macro_rules! sort_offers {
 
 fn download() -> Result<()> {
     println!("Downloading offer listings");
-    {
-        let response = attohttpc::get(INTERNET_URL).send()?;
-        let internet_file = File::create(INTERNET_FILE)?;
-        response.write_to(internet_file)?;
-    }
-    {
-        let response = attohttpc::get(PAKET_URL).send()?;
-        let package_file = File::create(PAKET_FILE)?;
-        response.write_to(package_file)?;
-    }
+
+    let response = attohttpc::get(INTERNET_URL).send().context(INTERNET_URL)?;
+    let internet_file = File::create(INTERNET_FILE).context(INTERNET_FILE)?;
+    response.write_to(internet_file)?;
+
     Ok(())
 }
 
@@ -138,7 +98,7 @@ fn fetch_details_page(product_id: u32) -> Result<PathBuf> {
 
 fn update(no_download: bool) -> Result<()> {
     if !no_download {
-        download()?;
+        download().context("Failed to download offers")?;
     }
     // let mut internet_offers = parse_internet_overview_page(load_file(INTERNET_FILE)?.as_ref());
     let products = ProductOffers::from_file(INTERNET_FILE)?;
@@ -159,7 +119,7 @@ fn dump() -> Result<()> {
 
     sort_offers!(offers, isp, speed_down, speed_up);
 
-    let mut table = tabular::Table::new("{:<} {:>} {:>} kr {:>} kr {:>} kr");
+    let mut table = tabular::Table::new("{:<} {:>} {:>} {:>} {:>}");
     table.add_row(row!("ISP", "DL/UL", "År 1", "År 2", "1+2"));
     for offer in &offers {
         let y1 = offer.calc_cost_1st_year();
@@ -185,7 +145,10 @@ fn load_file<P: AsRef<Path>>(filename: P) -> Result<String> {
 }
 
 fn load_offers_from_json() -> Result<Vec<Offer>> {
-    let ret: Vec<Offer> = serde_json::from_reader(File::open("offers.json")?)?;
+    let filename = "offers.json";
+    let ret: Vec<Offer> =
+        serde_json::from_reader(File::open(&filename).context("Failed to open file.")?)
+            .context("Failed to parse file.")?;
     Ok(ret)
 }
 

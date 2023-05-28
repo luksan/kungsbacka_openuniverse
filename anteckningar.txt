@@ -12,6 +12,14 @@ Universal Telecom - Publika IPv4 adresser, 2 stycken går att få.
 TH1NG - Oklart.
 
 
+Bra Bredband - Billiga, CG-NAT, tydlig IP policy
+Internetport Sweden - oklart, ingen FAQ
+Bredband2 - Antagligen CG-NAT, folk säger att man kan slippa CG-NAT om man frågar
+Banhof -  Möjlighet till publikt IP
+NWT Media -  CG-NAT, har FAQ
+Junet
+
+
 # Dåliga
 
 Bredband2   har FAQ. Inga publika IP som standard. Ingen IPv6
