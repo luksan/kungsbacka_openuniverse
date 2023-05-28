@@ -9,8 +9,8 @@ description = "Ladda ner erbjudanden från Openuniverse och jämför priser."
 
 [dependencies]
 anyhow = "1.0.*"
-attohttpc = "0.19.1"
-clap = { version = "3", features = ["derive"] }
+attohttpc = "0.25.0"
+clap = { version = "4.3.0", features = ["derive"] }
 regex = "1"
 serde = "~1.0.114"
 serde-aux = "4.2.0"

@@ -27,12 +27,6 @@ type SEK = Sek;
 type MBit = u16;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum CampaignInfo {
-    Yes(String),
-    No,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Offer {
     isp: String,
     product_id: u32,
